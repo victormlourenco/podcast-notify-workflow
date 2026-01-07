@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import os
-import json
+import hashlib
 import xml.etree.ElementTree as ET
 from pathlib import Path
 import requests
@@ -8,7 +8,7 @@ import requests
 RSS_URL = os.environ.get("RSS_URL")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_IDS = [cid.strip() for cid in os.environ.get("TELEGRAM_CHAT_IDS", "").split(",") if cid.strip()]
-STATE_FILE = Path("data/last_episode.json")
+STATE_FILE = Path("data/last_episode_hash.txt")
 
 
 def fetch_rss_feed():
@@ -35,20 +35,22 @@ def parse_latest_episode(rss_content):
     }
 
 
-def load_last_episode():
+def get_episode_hash(episode):
+    return hashlib.sha256(episode["guid"].encode()).hexdigest()
+
+
+def load_last_hash():
     if not STATE_FILE.exists():
         return None
     try:
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, IOError):
+        return STATE_FILE.read_text().strip()
+    except IOError:
         return None
 
 
-def save_last_episode(episode):
+def save_last_hash(episode_hash):
     STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump(episode, f, indent=2, ensure_ascii=False)
+    STATE_FILE.write_text(episode_hash)
 
 
 def send_telegram_notification(episode):
@@ -91,17 +93,18 @@ def main():
     
     print(f"Latest episode: {latest_episode['title']}")
     
-    last_episode = load_last_episode()
+    current_hash = get_episode_hash(latest_episode)
+    last_hash = load_last_hash()
     
-    if last_episode is None:
-        print("First run - saving current episode as baseline.")
-        save_last_episode(latest_episode)
+    if last_hash is None:
+        print("First run - saving current episode hash as baseline.")
+        save_last_hash(current_hash)
         return
     
-    if latest_episode["guid"] != last_episode["guid"]:
+    if current_hash != last_hash:
         print(f"New episode detected: {latest_episode['title']}")
         send_telegram_notification(latest_episode)
-        save_last_episode(latest_episode)
+        save_last_hash(current_hash)
     else:
         print("No new episodes.")
 
