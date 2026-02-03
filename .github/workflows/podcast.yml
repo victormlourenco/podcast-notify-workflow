@@ -1,4 +1,4 @@
-name: Podcast New Episode Notifier
+name: Podcast New Episode Notifier Cron
 
 on:
   schedule:
